@@ -36,15 +36,15 @@ async def get_db():
 
 @app.post("/wallets", response_model=WalletResponse, status_code=status.HTTP_201_CREATED)
 async def create_wallet(payload: CreateWalletRequest, db: AsyncSession = Depends(get_db)):
-    existing_wallet = (
-        await db.execute(select(Wallet).where(Wallet.user_id == payload.user_id))
-    ).scalar_one_or_none()
-    if existing_wallet:
-        raise HTTPException(status_code=400, detail="Wallet already exists for this user.")
+    async with db.begin():
+        existing_wallet = (
+            await db.execute(select(Wallet).where(Wallet.user_id == payload.user_id))
+        ).scalar_one_or_none()
+        if existing_wallet:
+            raise HTTPException(status_code=400, detail="Wallet already exists for this user.")
 
-    wallet = Wallet(user_id=payload.user_id, balance=Decimal("0.00"))
-    db.add(wallet)
-    await db.commit()
+        wallet = Wallet(user_id=payload.user_id, balance=Decimal("0.00"))
+        db.add(wallet)
     await db.refresh(wallet)
     return wallet
 
@@ -72,23 +72,23 @@ def create_ledger_entry(wallet: Wallet, entry_type: str, amount: Decimal) -> Led
 
 @app.post("/wallets/{user_id}/credit", response_model=WalletResponse)
 async def credit_wallet(user_id: str, payload: AmountRequest, db: AsyncSession = Depends(get_db)):
-    wallet = await get_wallet_for_update(db, user_id)
-    wallet.balance += payload.amount
-    db.add(create_ledger_entry(wallet, "credit", payload.amount))
-    await db.commit()
+    async with db.begin():
+        wallet = await get_wallet_for_update(db, user_id)
+        wallet.balance += payload.amount
+        db.add(create_ledger_entry(wallet, "credit", payload.amount))
     await db.refresh(wallet)
     return wallet
 
 
 @app.post("/wallets/{user_id}/debit", response_model=WalletResponse)
 async def debit_wallet(user_id: str, payload: AmountRequest, db: AsyncSession = Depends(get_db)):
-    wallet = await get_wallet_for_update(db, user_id)
-    if wallet.balance < payload.amount:
-        raise HTTPException(status_code=400, detail="Insufficient balance.")
+    async with db.begin():
+        wallet = await get_wallet_for_update(db, user_id)
+        if wallet.balance < payload.amount:
+            raise HTTPException(status_code=400, detail="Insufficient balance.")
 
-    wallet.balance -= payload.amount
-    db.add(create_ledger_entry(wallet, "debit", payload.amount))
-    await db.commit()
+        wallet.balance -= payload.amount
+        db.add(create_ledger_entry(wallet, "debit", payload.amount))
     await db.refresh(wallet)
     return wallet
 
