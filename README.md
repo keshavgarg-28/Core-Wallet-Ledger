@@ -6,6 +6,11 @@
 uvicorn app.main:app --reload
 ```
 
+## Authentication
+
+- `POST /auth/register`
+- `POST /auth/login`
+
 ## Run Phase 2 Concurrency Test
 
 ```powershell
