@@ -5,7 +5,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import create_access_token, get_current_user
+from app.auth import create_access_token, get_current_user, hash_password, is_password_hashed, verify_password
 from app.database import Base, SessionLocal, engine
 from app.dependencies import get_authorized_user
 from app.models import LedgerEntry, User, Wallet
@@ -26,6 +26,13 @@ from app.schemas import (
 async def lifespan(_: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    async with SessionLocal() as db:
+        async with db.begin():
+            users = (await db.execute(select(User))).scalars().all()
+            for user in users:
+                if not is_password_hashed(user.password_hash):
+                    user.password_hash = hash_password(user.password_hash)
     yield
 
 
@@ -47,7 +54,7 @@ async def register_user(payload: RegisterRequest, db: AsyncSession = Depends(get
         if existing_user:
             raise HTTPException(status_code=400, detail="Username already exists.")
 
-        user = User(username=payload.username, password=payload.password)
+        user = User(username=payload.username, password_hash=hash_password(payload.password))
         db.add(user)
     await db.refresh(user)
     return user
@@ -58,7 +65,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = (
         await db.execute(select(User).where(User.username == payload.username))
     ).scalar_one_or_none()
-    if not user or user.password != payload.password:
+    if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials.")
 
     access_token = create_access_token(user.id)
