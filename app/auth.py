@@ -13,10 +13,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import SessionLocal
+from app.logger import get_logger
 from app.models import User
 
 
 load_dotenv()
+logger = get_logger(__name__)
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if not SECRET_KEY:
@@ -82,19 +84,28 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         if not user_id:
+            logger.warning("JWT token missing subject claim.")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
     except jwt.InvalidTokenError as exc:
+        logger.warning("JWT validation failed.")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.") from exc
 
     async with SessionLocal() as db:
         user = (await db.execute(select(User).where(User.id == int(user_id)))).scalar_one_or_none()
         if user is None:
+            logger.warning("JWT resolved to unknown user_id=%s.", user_id)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token.")
+        logger.info("Authenticated user_id=%s via JWT.", user.id)
         return user
 
 
 def authorize_user_access(requested_user_id: str, current_user: User) -> None:
     if requested_user_id != str(current_user.id):
+        logger.warning(
+            "Authorization blocked for current_user_id=%s on requested_user_id=%s.",
+            current_user.id,
+            requested_user_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not allowed to access another user's wallet.",

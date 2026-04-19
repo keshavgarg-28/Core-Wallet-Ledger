@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.dependencies import get_authorized_user, get_db
+from app.logger import get_logger
 from app.models import User
 from app.schemas import (
     AmountRequest,
@@ -20,6 +21,7 @@ from app.services.wallet_service import (
 )
 
 router = APIRouter(prefix="/wallets", tags=["wallets"])
+logger = get_logger(__name__)
 
 
 @router.post("", response_model=WalletResponse, status_code=status.HTTP_201_CREATED)
@@ -28,6 +30,7 @@ async def create_wallet(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    logger.info("Create wallet endpoint called for current_user_id=%s.", current_user.id)
     return await create_user_wallet(db, payload, current_user)
 
 
@@ -38,6 +41,7 @@ async def credit_wallet(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_authorized_user),
 ):
+    logger.info("Credit wallet endpoint called for user_id=%s amount=%s.", user_id, payload.amount)
     return await credit_user_wallet(db, user_id, payload)
 
 
@@ -48,6 +52,7 @@ async def debit_wallet(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_authorized_user),
 ):
+    logger.info("Debit wallet endpoint called for user_id=%s amount=%s.", user_id, payload.amount)
     return await debit_user_wallet(db, user_id, payload)
 
 
@@ -57,6 +62,7 @@ async def get_wallet_balance(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_authorized_user),
 ):
+    logger.info("Get balance endpoint called for user_id=%s.", user_id)
     return await get_user_wallet_balance(db, user_id)
 
 
@@ -66,4 +72,5 @@ async def get_transaction_history(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_authorized_user),
 ):
+    logger.info("Get transactions endpoint called for user_id=%s.", user_id)
     return await get_user_transaction_history(db, user_id)
