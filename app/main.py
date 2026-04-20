@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from sqlalchemy import text
 
 from app.database import Base, SessionLocal, engine
 from app.logger import get_logger, setup_logging
@@ -18,6 +19,7 @@ async def lifespan(_: FastAPI):
     logger.info("Application startup initiated.")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("ALTER TABLE wallets ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0"))
         logger.info("Database tables ensured.")
 
     async with SessionLocal() as db:
